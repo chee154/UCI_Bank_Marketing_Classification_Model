@@ -5,26 +5,83 @@ date: "7/23/2020"
 output: html_document
 ---
 
-```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
-```
-## Setup & General Libraries
+#### Setup & General Libraries
 ```{r,warning=FALSE,message=FALSE}
 library(tidyr)
 library(dplyr)
 library(ggplot2)
+library(tidyverse)
 
-setwd("C:/Users/David/Google Drive/Masters/Summer 2020/DS 6372 - Applied Statistics Inference & Modeling/Project 2/Data Files/")
-bank_df <- read.csv("bank-additional-full.csv", header=TRUE, sep=";")
-head(bank_df, 5)
+setwd("C:/Users/David/Google Drive/Code & Programming/GitHub/MSDS_6372_Applied-Statistics_Project_2/UCI_Bank_Marketing_Classification_Model/Data Files/")
+df <- read.csv("bank-additional-full.csv", header=TRUE, sep=";")
+head(df, 5)
+```
+
+#### Data Tidying
+```{r,warning=FALSE,message=FALSE}
+# renaming response variable 'y' to 'Clnt_Subcr'
+df <- df %>% rename(clnt.subcr = `y`)
+df$clnt.subcr <- factor(df$clnt.subcr)
+
+library(naniar)
+# verifying missing data: no missing data found
+vis_miss(df) + xlab("Data Columns")
+
+# finding which columns in df are categorical
+cat_class <- as.data.frame(sapply(df, class))
+cat_class
+
+# exploring the unique data values for all categorical variables
+cat_types <- c(2,3,4,5,6,7,8,9,10,15)
+for(i in cat_types){
+  print(colnames(df[i]))
+  print(df %>% count(df[,i]))
+}
+
+# converting all "unknown" values back to NA
+df_stg <- df
+df_stg[df_stg=="unknown"] <- NA
+vis_miss(df_stg) + xlab("Data Columns")
+
+# filtering out all NA values from dataset
+df_stg <- df_stg %>% filter(!is.na(job) & !is.na(marital) & !is.na(education) & !is.na(default)
+                                      & !is.na(housing) & !is.na(loan) & !is.na(contact))
+# checking all missing variables filtered out
+vis_miss(df_stg) + xlab("Data Columns")
+# validating reduction in row totals after filtering missing data
+nrow(df_stg) 
+nrow(df)
+table(df_stg$clnt.subcr)
+
+# Converting all int to numeric value types
+int_types <- c(1,11,12,13,14)
+for(i in int_types){
+  df_stg[,i] <- as.numeric(df_stg[, i])
+}
+
+# converting all categorical variables into factors types
+df_stg_factors <- df_stg
+for(i in cat_types){
+  df_stg_factors[, i] <- factor(df_stg_factors[,i])
+}
+
+# df with all cleaned data
+bank_df <- df_stg
+# df with all cleaned AND factored categorical variables
+bank_df_num <- df_stg_cat
+
+# Downsampling
+
 ```
 
 ## EDA
 ```{r,warning=FALSE,message=FALSE}
+library(GGally)
 summary(bank_df)
-table(bank_df$y)
-ncol(bank_df)
-pairs(bank_df, col=bank_df$y)
+table(df$clnt.subcr)
+ncol(df)
+num_types <- c(1,11,12,13,14,16,17,18,19,20)
+ggpairs(bank_df_num, columns=num_types, aes(colour=clnt.subcr))
 
 # is there a relationship between # of contacts made and the month or week?
 library(stringr)
@@ -38,66 +95,9 @@ bank_df$month <- factor(bank_df$month, levels=month.abb)
 bank_df %>% ggplot(aes(x=month, y=campaign,fill=day_of_week)) + geom_bar(stat="identity") + scale_x_discrete(limits=month.abb) + labs(title="# of Campaigns per Month by Day", x="Month", y="# of Campaigns", fill="Day of Week")
 
 
-
 ```
 
-## Data Cleanup
-```{r,warning=FALSE,message=FALSE}
-# verifying missing data: no missing data found
-vis_miss(bank_df) + xlab("Data Columns")
 
-# exploring the unique data values per categorical variable:
-categorical_num <- c(2,3,4,5,6,7,8,9,10,15)
-for(j in categorical_num)
-{
-  print(bank_df %>% count(bank_df[,j]))
-}
-
-# converting all "unknown" values back to NA for imputing
-bank_df_bkp <- bank_df
-bank_df_bkp[bank_df_bkp=="unknown"] <- NA
-categorical_num <- c(2,3,4,5,6,7,8,9,10,15)
-for(j in categorical_num)
-{
-  print(bank_df_bkp %>% count(bank_df_bkp[,j]))
-}
-vis_miss(bank_df_bkp) + xlab("Data Columns")
-
-
-
-  
-  # function to impute mean for ABV and IBU based on means of style
-naMeanFill <- function (Style, Column, Colname) {
-  if ( Colname == 'ABV') 
-    { 
-      mean = mean_abv_ibu$mean_ABV[ mean_abv_ibu$Style == Style]
-    } 
-  else
-    { 
-      mean = mean_abv_ibu$mean_IBU[ mean_abv_ibu$Style == Style]
-    }
-  Column[is.na(Column)] <- mean
-  return(Column)  
-}
-
-
-# vectorize the function
-naMeanFill_v <- Vectorize(naMeanFill)
-
-bank_df %>% count(bank_df$job)
-job <- bank_df %>% group_by(bank_df$job) %>% summarise(Counts=n())
-ggplot(job, aes(x=job, Counts)) + geom_bar(stat="identity")
-
-ggplot(bank_df, aes(factor(job), Freq)) + geom_col(position="dodge")
-
-# converting all categorical variables into numeric types
-test_job <- transform(bank_df,job=as.numeric(factor(bank_df$job)))
-test_marital <- transform(bank_df,marital=as.numeric(factor(bank_df$marital)))
-test_education <- transform(bank_df,education=as.numeric(factor(bank_df$education)))
-
-
-
-```
 
 
 
