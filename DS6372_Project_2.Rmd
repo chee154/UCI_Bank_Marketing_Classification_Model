@@ -100,25 +100,67 @@ nrow(df_stg) #filterd NA
 nrow(df_final) #organized
 table(df_stg$clnt.subcr)
 
+# Downsampling
+# Train/Test split with cleaned data
+set.seed(27)
+splitPerc = .70
+df_index = sample(1:dim(df_final)[1],round(splitPerc * dim(df_final)[1]))
+df_train = df_final[df_index,]
+df_test = df_final[-df_index,]
+
+# Train/Test data with Downsampling Applied
+library(caret)
+set.seed(27)
+df_train_dwnsmpled <- downSample(x = df_train,y = df_train$clnt.subcr_desc)
+table(df_train_dwnsmpled$clnt.subcr_ID) 
+table(df_final$clnt.subcr_ID)
+table(df_train$clnt.subcr_ID)
+table(df_test$clnt.subcr_ID)
+table(df_train_dwnsmpled$clnt.subcr_ID) 
+
 ```
 
-## EDA
+## EDA - Part 1 - Numerical Type Data
+__As part of our EDA, we first wanted to determine if there was any multicollinearity present between any of the numeric variables. We can see from the correlation matrix below (Figure B.1) that there were a few highly correlated variables (corr > .95) such as  ‘Eurobor3m’ vs ‘Emp.var.rate’. We will look closer into any correlations higher than corr=.85 as our baseline for analysis. Based on our understanding of the that Emp.var.rate is the rate of cyclical employment, and Eurobor3m is the interest rate at which banks loan, __
 ```{r,warning=FALSE,message=FALSE}
 library(GGally)
+library(corrplot)
 #summary of all numerical variables
 summary(df_num_only)
 
-num_types <- c(1,11,12,13,14,16,17,18,19,20)
-ggpairs(bank_df_num, columns=num_types, aes(colour=clnt.subcr))
+# creating correlation matrix  of numerical datatypes
+corr_matrix_num <- df_train_dwnsmpled[,c(24:33)]
+M <- cor(corr_matrix_num, use="pairwise.complete.obs")
+corrplot(M, method = "number", order = "alphabet",number.cex=0.5)
+
+# observing Eurobo3m vs Emp.var.rate
+df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, y=emp.var.rate, fill=clnt.subcr_desc)) + geom_point() +geom_smooth(method="lm")
+# observing Eurobo3m vs Nr.Employed
+df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, y=nr.employed, fill=clnt.subcr_desc)) + geom_point() +geom_smooth(method="lm")
+# observing Nr.employed vs Emp.var.rate
+df_train_dwnsmpled %>% ggplot(aes(x=nr.employed, y=emp.var.rate, fill=clnt.subcr_desc)) + geom_point() +geom_smooth(method="lm")
+
+```
+
+### EDA - Part 2 - Categorical Type Data
+__We first wanted to explore if there was any relationships between the # of campaigns and the months it was run in (Figure B.2). We can see that interestingly, most of the campaigns were done during the summer months with fewer amount of contacts made to clients closer to winter months. Additionally, we can rule out the Day_of_Week variable as a potential explanatory variable as it appears there is a somewhat even distribution of calls being made throughout the week.__
+```{r,warning=FALSE,message=FALSE}
+# conducting ANOVA on categorical types to observe differences between variables and our response factors
+aov_test <- aov(clnt.subcr_ID~job_ID+marital_ID+education_ID+default_ID+loan_ID+contact_ID+month_ID+poutcome_ID, data=df_train_dwnsmpled)
+summary.aov(aov_test)
 
 # is there a relationship between # of contacts made and the month or week?
 library(stringr)
-df_final$month_cap <- str_to_title(df_final$month_desc)
-df_final$month_cap <- factor(df_final$month_cap, levels=month.abb)
+df_train_dwnsmpled$month_cap <- str_to_title(df_train_dwnsmpled$month_desc)
+df_train_dwnsmpled$month_cap <- factor(df_train_dwnsmpled$month_cap, levels=month.abb)
 # number of campaigns run per month
-df_final %>% ggplot(aes(x=month_cap, y=campaign,fill=day_of_week_desc)) + geom_bar(stat="identity") + scale_x_discrete(limits=month.abb) + labs(title="# of Campaigns per Month by Day", x="Month", y="# of Campaigns", fill="Day of Week")
-
+df_train_dwnsmpled %>% ggplot(aes(x=month_cap, y=campaign,fill=day_of_week_desc)) + geom_bar(stat="identity") + scale_x_discrete(limits=month.abb) + labs(title="# of Campaigns per Month by Day", x="Month", y="# of Campaigns", fill="Day of Week")
 ```
+
+### Feature Selection
+```{r,warning=FALSE,message=FALSE}
+```
+
 
 
 
