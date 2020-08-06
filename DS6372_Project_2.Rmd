@@ -14,7 +14,7 @@ library(tidyverse)
 
 setwd("C:/Users/David/Google Drive/Code & Programming/GitHub/MSDS_6372_Applied-Statistics_Project_2/UCI_Bank_Marketing_Classification_Model/Data Files/")
 df <- read.csv("bank-additional-full.csv", header=TRUE, sep=";")
-head(df, 5)
+str(df)
 ```
 
 #### Data Tidying
@@ -93,12 +93,11 @@ df_cat_merge <- df_cat_merge[c(1,2,13,3,14,4,15,5,16,6,17,7,18,8,19,9,20,10,21,1
 # joining all numerical with categorical data together as final df
 df_final <- merge(x=df_cat_merge, y=df_num_only, by="ID", all.x=TRUE)
 head(df_final, 1)
-View(df_final)
+
 # validating df matches all prior df stages
 nrow(df) #raw
 nrow(df_stg) #filterd NA
-nrow(df_final) #organized
-table(df_stg$clnt.subcr)
+nrow(df_final) #organized, should match df_stg
 
 # Downsampling
 # Train/Test split with cleaned data
@@ -112,19 +111,21 @@ df_test = df_final[-df_index,]
 library(caret)
 set.seed(27)
 df_train_dwnsmpled <- downSample(x = df_train,y = df_train$clnt.subcr_desc)
-table(df_train_dwnsmpled$clnt.subcr_ID) 
-table(df_final$clnt.subcr_ID)
-table(df_train$clnt.subcr_ID)
-table(df_test$clnt.subcr_ID)
-table(df_train_dwnsmpled$clnt.subcr_ID) 
+df_test_dwnsmpled <- downSample(x = df_test,y = df_test$clnt.subcr_desc)
+
+table(df_final$clnt.subcr_ID) #cleaned table
+table(df_train_dwnsmpled$clnt.subcr_ID) #train downsampled
+table(df_test_dwnsmpled$clnt.subcr_ID) #test downsampled
+
+table(df_train$clnt.subcr_ID) #train nondownsampled
+table(df_test$clnt.subcr_ID) #test nondownsample
 
 ```
 
-## EDA - Part 1 - Numerical Type Data
+## Objective 1 - Part 1 - Numerical Type Data
 __As part of our EDA, we first wanted to determine if there was any multicollinearity present between any of the numeric variables. We can see from the correlation matrix below (Figure B.1) that there were a few highly correlated variables (corr > .95) such as  ‘Eurobor3m’ vs ‘Emp.var.rate’. We will look closer into any correlations higher than corr=.85 as our baseline for analysis. To start, based on our understanding of the that Emp.var.rate is the rate of cyclical employment with a lower rate indicating stabilitiy in employment and a higher rate indicating lots of job movement and with Eurobor3m being the interest rate of banks. However, though the correlation is high, the groupings of the interest rate is seemingly between low and high, without any middle. This could explain the higher correlations, but without proper distribution, dependcy will not be assumed.  __
 
 \newline
-
 __EDA based Reduced numerical attributes: difficult to remove based on EDA, will leave to feature selection process__
 ```{r,warning=FALSE,message=FALSE}
 library(GGally)
@@ -152,11 +153,9 @@ df_train_dwnsmpled %>% ggplot(aes(x=nr.employed, y=emp.var.rate, fill=clnt.subcr
 
 # df_train_dwnsmpled %>% ggplot(aes(x=nr.employed, y=emp.var.rate, fill=clnt.subcr_desc)) + geom_point() +geom_smooth(method="lm")
 df_train_dwnsmpled %>% ggplot(aes(x=nr.employed, fill=clnt.subcr_desc)) + geom_histogram()
-
-# 
 ```
 
-### EDA - Part 2 - Categorical Type Data
+### Objective 1 - Part 2 - Categorical Type Data
 __We first wanted to explore if there was any relationships between the # of campaigns and the months it was run in (Figure B.2). We can see that interestingly, most of the campaigns were done during the summer months with fewer amount of contacts made to clients closer to winter months. Additionally, we can rule out the Day_of_Week variable as a potential explanatory variable as it appears there is a somewhat even distribution of calls being made throughout the week.__
 
 \newline
@@ -169,10 +168,10 @@ summary.aov(aov_test)
 
 # is there a relationship between # of contacts made and the month or week?
 library(stringr)
-df_train_dwnsmpled$month_cap <- str_to_title(df_train_dwnsmpled$month_desc)
-df_train_dwnsmpled$month_cap <- factor(df_train_dwnsmpled$month_cap, levels=month.abb)
+df_train_dwnsmpled$month_desc <- str_to_title(df_train_dwnsmpled$month_desc)
+df_train_dwnsmpled$month_desc <- factor(df_train_dwnsmpled$month_cap, levels=month.abb)
 # number of campaigns run per month
-df_train_dwnsmpled %>% ggplot(aes(x=month_cap, y=campaign,fill=day_of_week_desc)) + geom_bar(stat="identity") + scale_x_discrete(limits=month.abb) + labs(title="# of Campaigns per Month by Day", x="Month", y="# of Campaigns", fill="Day of Week")
+df_train_dwnsmpled %>% ggplot(aes(x=month_desc, y=campaign,fill=day_of_week_desc)) + geom_bar(stat="identity") + scale_x_discrete(limits=month.abb) + labs(title="# of Campaigns per Month by Day", x="Month", y="# of Campaigns", fill="Day of Week")
 
 # job_desc vs emp.var.rate
 df_train_dwnsmpled %>% ggplot(aes(x=clnt.subcr_desc, y=duration)) + geom_boxplot()
@@ -180,27 +179,55 @@ df_train_dwnsmpled %>% ggplot(aes(x=clnt.subcr_desc, y=duration)) + geom_boxplot
 
 ```
 
-### Feature Selection & Modeling
+### Objective 1 - Feature Selection & Logistic Regression Modeling
 ```{r,warning=FALSE,message=FALSE}
 library(MASS)
-# defining variables to exclude based on EDA
-exclude_columns <- c(1,3,5,7,8,9,12,13,15,17,18,19,21,23,34,35)
-model_df <- df_train_dwnsmpled[, -exclude_columns]
-full_model <- lm(clnt.subcr_ID~., data=model_df)
+# defining variables to exclude based on EDA (removing "_desc" attributes)
+exclude_columns_EDA <- c(1,3,5,7,8,9,12,13,15,17,18,19,21,34)
 
-# Running stepwise
+# removing the EDA based attributes to both the downsampled test and train set
+full_model_train <- df_train_dwnsmpled[, -exclude_columns_EDA]
+full_model_test <- df_test_dwnsmpled[, -exclude_columns_EDA]
+#validating column consistency
+ncol(full_model_train)
+ncol(full_model_test)
+
+nrow(full_model_train)
+nrow(full_model_test)
+
+full_model <- lm(clnt.subcr_ID~., data=full_model_train[, -10])
+
+# stepwise Model
 step_model <- stepAIC(full_model, direction="both", trace=FALSE)
 summary(step_model)
-exp(cbind("Odds ratio" = coef(step_model), confint.default(step_model, level = 0.95)))
-coef(step_model, 4)
-# Running Forward
+
+# Forward Model
 fwd_model <- stepAIC(full_model, direction="forward", trace=FALSE)
 summary(fwd_model)
-# Running Backward
+# Backward Model
 bck_model <- stepAIC(full_model, direction="backward", trace=FALSE)
 summary(bck_model)
+# LASSO model
+
+# Logistic Regression Model
+library(glmnet)
+logit_model <- glm(clnt.subcr_desc~., family="binomial", data=full_model_train[, -9])
+summary(logit_model)
+
+#determing accuracy of logitic regression model
+logit_pred <- predict(logit_model, newdata=full_model_test, type="response")
+cutoff <- .5
+logit_pred.class <- factor(ifelse(logit_pred>cutoff, "yes", "no"))
+
+confusionMatrix(logit_pred.class, as.factor(full_model_test$clnt.subcr_desc))
+
+# ROC curve
+
 ```
 
+### Objective 2 - Competing Models and Model Tuning
+```{r,warning=FALSE,message=FALSE}
+```
 
 
 
