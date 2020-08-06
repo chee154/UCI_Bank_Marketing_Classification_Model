@@ -221,12 +221,19 @@ cutoff <- .5
 logit_pred.class <- factor(ifelse(logit_pred>cutoff, "yes", "no"))
 confusionMatrix(logit_pred.class, as.factor(full_model_test$clnt.subcr_desc))
 
-# ROC curve
-ROC_
 ```
 
 ### Objective 2 - Competing Models and Model Tuning
 ```{r,warning=FALSE,message=FALSE}
+# Viewing Model Selection Prediction Specificity/Sensivity
+library(ROCR)
+results_logit_pred <- prediction(logit_pred, full_model_test$clnt.subcr_desc, label.ordering=c("yes","no"))
+featureselect_ROC <- performance(results_logit_pred, measure="tpr", x.measure="fpr")
+plot(featureselect_ROC, colorize=TRUE)
+abline(a=0, b=1)
+
+# Adding complexity to the model: what if we were to take our highly correlated values and instead apply an interaction?
+
 ```
 
 
