@@ -209,6 +209,7 @@ bck_model <- stepAIC(full_model, direction="backward", trace=FALSE)
 summary(bck_model)
 # LASSO model
 
+
 # Logistic Regression Model
 library(glmnet)
 logit_model <- glm(clnt.subcr_desc~., family="binomial", data=full_model_train[, -9])
@@ -218,11 +219,10 @@ summary(logit_model)
 logit_pred <- predict(logit_model, newdata=full_model_test, type="response")
 cutoff <- .5
 logit_pred.class <- factor(ifelse(logit_pred>cutoff, "yes", "no"))
-
 confusionMatrix(logit_pred.class, as.factor(full_model_test$clnt.subcr_desc))
 
 # ROC curve
-
+ROC_
 ```
 
 ### Objective 2 - Competing Models and Model Tuning
