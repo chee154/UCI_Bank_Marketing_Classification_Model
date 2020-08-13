@@ -139,7 +139,7 @@ M <- cor(corr_matrix_num, use="pairwise.complete.obs")
 corrplot(M, method = "number", order = "alphabet",number.cex=0.5)
 
 # distributino of eurobor3m
-df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, fill=clnt.subcr_desc)) + geom_density()
+df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, fill=clnt.subcr_desc)) + geom_density() + labs(title="Distribution of eurobor3m (Int Rate)")
 
 # observing Eurobo3m vs Emp.var.rate
 df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, y=emp.var.rate, fill=clnt.subcr_desc)) + geom_jitter() +geom_smooth(method="lm")
@@ -169,7 +169,7 @@ summary.aov(aov_test)
 # is there a relationship between # of contacts made and the month or week?
 library(stringr)
 df_train_dwnsmpled$month_desc <- str_to_title(df_train_dwnsmpled$month_desc)
-df_train_dwnsmpled$month_desc <- factor(df_train_dwnsmpled$month_cap, levels=month.abb)
+df_train_dwnsmpled$month_desc <- factor(df_train_dwnsmpled$month_desc, levels=month.abb)
 # number of campaigns run per month
 df_train_dwnsmpled %>% ggplot(aes(x=month_desc, y=campaign,fill=day_of_week_desc)) + geom_bar(stat="identity") + scale_x_discrete(limits=month.abb) + labs(title="# of Campaigns per Month by Day", x="Month", y="# of Campaigns", fill="Day of Week")
 
@@ -183,7 +183,7 @@ df_train_dwnsmpled %>% ggplot(aes(x=clnt.subcr_desc, y=duration)) + geom_boxplot
 ```{r,warning=FALSE,message=FALSE}
 library(MASS)
 # defining variables to exclude based on EDA (removing "_desc" attributes)
-exclude_columns_EDA <- c(1,3,5,7,8,9,12,13,15,17,18,19,21,34)
+exclude_columns_EDA <- c(1,3,5,7,8,9,11,12,13,15,17,18,19,21,34)
 
 # removing the EDA based attributes to both the downsampled test and train set
 full_model_train <- df_train_dwnsmpled[, -exclude_columns_EDA]
@@ -200,19 +200,16 @@ full_model <- lm(clnt.subcr_ID~., data=full_model_train[, -10])
 # stepwise Model
 step_model <- stepAIC(full_model, direction="both", trace=FALSE)
 summary(step_model)
-
 # Forward Model
 fwd_model <- stepAIC(full_model, direction="forward", trace=FALSE)
 summary(fwd_model)
 # Backward Model
 bck_model <- stepAIC(full_model, direction="backward", trace=FALSE)
 summary(bck_model)
-# LASSO model
-
 
 # Logistic Regression Model
 library(glmnet)
-logit_model <- glm(clnt.subcr_desc~., family="binomial", data=full_model_train[, -9])
+logit_model <- glm(clnt.subcr_desc~., family="binomial", data=full_model_train[, -8])
 summary(logit_model)
 
 #determing accuracy of logitic regression model
@@ -221,6 +218,31 @@ cutoff <- .5
 logit_pred.class <- factor(ifelse(logit_pred>cutoff, "yes", "no"))
 confusionMatrix(logit_pred.class, as.factor(full_model_test$clnt.subcr_desc))
 
+```
+
+### Objective 1 - Assumption Checking & Parameter Interpretation
+__The major assumptions for logistic regression includes 
+```{r,warning=FALSE,message=FALSE}
+# Lack of Fit Plot
+train_pi <- predict(logit_model, interval="predict")
+intuitve_pi <- predict()
+
+model_data <- cbind(train, train_pi)
+model_plot <- ggplot(model_data, aes(fit,Life.expectancy)) + geom_point() + stat_smooth(method=lm) + 
+  geom_line(aes(y=lwr), color="red", linetype="dashed")+
+  geom_line(aes(y=upr), color="red", linetype="dashed")+
+  labs(title="Predicted vs Actual Life Expectancy",
+       caption="Source: Life Expectancy (WHO)",
+       x="Predicted Value")
+model_plot
+
+par(mfrow=c(2,2))
+plot(logit_model,main="Residual Diagnostics")
+
+logit_model$coefficients
+
+exp(logit_model$coefficients)
+confint(logit_model)
 ```
 
 ### Objective 2 - Competing Models and Model Tuning
