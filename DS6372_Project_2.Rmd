@@ -55,6 +55,25 @@ vis_miss(df_stg) + xlab("Data Columns")
 nrow(df)
 nrow(df_stg) 
 
+# reorder the factor levesl of Education
+# [1] 'basic.4y'
+# [2] 'basic.6y'
+# [3] 'basic.9y'
+# [4] 'high.school'
+# [5] 'illiterate'
+# [6]'professional.course'
+# [7]'university.degree
+
+# recodg Education characters
+df_stg$education[df_stg$education == "illiterate"] <-"1_illiterate"
+df_stg$education[df_stg$education == "basic.4y"] <-"2_basic.4y"
+df_stg$education[df_stg$education == "basic.6y"] <-"3_basic.6y"
+df_stg$education[df_stg$education == "basic.9y"] <-"4_basic.9y"
+df_stg$education[df_stg$education == "high.school"] <-"5_high.school"
+df_stg$education[df_stg$education == "university.degree"] <-"6_university.degree"
+df_stg$education[df_stg$education == "professional.course"] <-"7_professional.course"
+
+
 # # Converting all int to numeric value types
 # int_types <- c(1,11,12,13,14)
 # for(i in int_types){
@@ -64,7 +83,7 @@ nrow(df_stg)
 # new df storing ID and all converted categorical variables into factor types
 df_cat <- df_stg
 for(i in cat_types){
-  df_cat[, i] <- factor(df_cat[,i])
+  df_cat[, i] <- factor(df_cat[,i], ordered=TRUE)
   x <- paste(colnames(df_cat[i]),"desc", sep="_")
   colnames(df_cat)[i] <- paste(x)
 }
@@ -72,7 +91,7 @@ for(i in cat_types){
 # create new df containing ID and all converted categorical variables into numerical types
 df_cat_num <- df_stg
 for(i in cat_types){
-  df_cat_num[, i] <- as.numeric(factor(df_cat_num[,i]))
+  df_cat_num[, i] <- as.numeric(factor(df_cat_num[,i]),ordered=TRUE)
   x <- paste(colnames(df_cat_num[i]),"ID", sep="_")
   colnames(df_cat_num)[i] <- paste(x)
 }
@@ -139,7 +158,8 @@ M <- cor(corr_matrix_num, use="pairwise.complete.obs")
 corrplot(M, method = "number", order = "alphabet",number.cex=0.5)
 
 # distributino of eurobor3m
-df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, fill=clnt.subcr_desc)) + geom_density() + labs(title="Distribution of eurobor3m (Int Rate)")
+df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, fill=clnt.subcr_desc)) + geom_histogram() + labs(title="Distribution of eurobor3m (Int Rate)")
+df_train %>% ggplot(aes(x=euribor3m, fill=clnt.subcr_desc)) + geom_histogram() + labs(title="Distribution of eurobor3m (Int Rate)")
 
 # observing Eurobo3m vs Emp.var.rate
 df_train_dwnsmpled %>% ggplot(aes(x=euribor3m, y=emp.var.rate, fill=clnt.subcr_desc)) + geom_jitter() +geom_smooth(method="lm")
@@ -195,74 +215,288 @@ ncol(full_model_test)
 nrow(full_model_train)
 nrow(full_model_test)
 
-full_model <- lm(clnt.subcr_ID~., data=full_model_train[, -10])
+full_model <- lm(clnt.subcr_ID~., data=full_model_train[, -9])
 
 # stepwise Model
 step_model <- stepAIC(full_model, direction="both", trace=FALSE)
 summary(step_model)
+stp_model_vars <- c(1,3,5,6,7,8,9,10,11,13,15,16,18,19)
+reduced_stp_model <- full_model_train[,stp_model_vars]
+str(reduced_stp_model)
 # Forward Model
-fwd_model <- stepAIC(full_model, direction="forward", trace=FALSE)
-summary(fwd_model)
+forward_min <- lm(clnt.subcr_ID~ 1, data=full_model_train[, -9])
+class_fwd_model <- step(forward_min, scope=list(lower=forward_min, upper=full_model), direction="forward")
+summary(class_fwd_model)
+fwd_model_vars <- c(1,3,5,6,7,8,9,10,11,13,15,17,18,19)
+
+reduced_fwd_model <- full_model_train[,fwd_model_vars]
+reduced_fwd_model_test <- full_model_test[,fwd_model_vars]
+
+str(reduced_fwd_model)
 # Backward Model
 bck_model <- stepAIC(full_model, direction="backward", trace=FALSE)
 summary(bck_model)
-
+bck_model_vars <- c(1,3,5,6,7,8,9,10,11,13,15,16,17,18,19)
+reduced_bkp_model <- full_model_train[,bck_model_vars]
 # Logistic Regression Model
 library(glmnet)
+#EDA Based
 logit_model <- glm(clnt.subcr_desc~., family="binomial", data=full_model_train[, -8])
-summary(logit_model)
+logit_model_fwd <- glm(clnt.subcr_desc~., family="binomial", data=reduced_fwd_model[, -6])
+logit_model_bck <- glm(clnt.subcr_desc~., family="binomial", data=reduced_bkp_model[, -6])
+logit_model_stp <- glm(clnt.subcr_desc~., family="binomial", data=reduced_stp_model[, -6])
+#AIC per model
+logit_model$aic
+logit_model_fwd$aic
+logit_model_bck$aic
+logit_model_stp$aic
+# Lack of Fit: determing accuracy of logitic regression model
+logit_pred <- predict(logit_model, newdata=full_model_test, type="response", interval="confidence")
+logit_pred_fwd <- predict(logit_model_fwd, newdata=full_model_test, type="response", interval="confidence")
+logit_pred_bck <- predict(logit_model_bck, newdata=full_model_test, type="response", interval="confidence")
+logit_pred_stp <- predict(logit_model_stp, newdata=full_model_test, type="response", interval="confidence")
 
-#determing accuracy of logitic regression model
-logit_pred <- predict(logit_model, newdata=full_model_test, type="response")
+# factoring each prediction for each model
 cutoff <- .5
 logit_pred.class <- factor(ifelse(logit_pred>cutoff, "yes", "no"))
-confusionMatrix(logit_pred.class, as.factor(full_model_test$clnt.subcr_desc))
+logit_pred_fwd.class <- factor(ifelse(logit_pred_fwd>cutoff, "yes", "no"))
+logit_pred_bkp.class <- factor(ifelse(logit_pred_bck>cutoff, "yes", "no"))
+logit_pred_stp.class <- factor(ifelse(logit_pred_stp>cutoff, "yes", "no"))
 
+# confusion matrix for each model
+logit_confusionmatrix <- confusionMatrix(logit_pred.class, as.factor(full_model_test$clnt.subcr_desc))
+logit_confusionmatrix_fwd <- confusionMatrix(logit_pred_fwd.class, as.factor(full_model_test$clnt.subcr_desc))
+logit_confusionmatrix_bkp <- confusionMatrix(logit_pred_bkp.class, as.factor(full_model_test$clnt.subcr_desc))
+logit_confusionmatrix_stp <- confusionMatrix(logit_pred_stp.class, as.factor(full_model_test$clnt.subcr_desc))
+
+# acc for each model
+logit_confusionmatrix$overall[1]
+logit_confusionmatrix_fwd$overall[1]
+logit_confusionmatrix_bkp$overall[1]
+logit_confusionmatrix_stp$overall[1]
+
+logit_confusionmatrix$byClass[1]
+logit_confusionmatrix_fwd$byClass[1]
+logit_confusionmatrix_bkp$byClass[1]
+logit_confusionmatrix_stp$byClass[1]
+
+logit_confusionmatrix$byClass[2]
+logit_confusionmatrix_fwd$byClass[2]
+logit_confusionmatrix_bkp$byClass[2]
+logit_confusionmatrix_stp$byClass[2]
 ```
 
 ### Objective 1 - Assumption Checking & Parameter Interpretation
-__The major assumptions for logistic regression includes 
 ```{r,warning=FALSE,message=FALSE}
-# Lack of Fit Plot
-train_pi <- predict(logit_model, interval="predict")
-intuitve_pi <- predict()
+# Residual Diagnostics
+residual_diag_par <- par(mfrow=c(2,2))
+plot(logit_model_fwd,main="Residual Diagnostics")
+par(residual_diag_par)
 
-model_data <- cbind(train, train_pi)
-model_plot <- ggplot(model_data, aes(fit,Life.expectancy)) + geom_point() + stat_smooth(method=lm) + 
-  geom_line(aes(y=lwr), color="red", linetype="dashed")+
-  geom_line(aes(y=upr), color="red", linetype="dashed")+
-  labs(title="Predicted vs Actual Life Expectancy",
-       caption="Source: Life Expectancy (WHO)",
-       x="Predicted Value")
-model_plot
+# Model Summary
+logit_confusionmatrix_fwd
 
-par(mfrow=c(2,2))
-plot(logit_model,main="Residual Diagnostics")
+# Model Interpretation
+exp(cbind("Odds ratio" = coef(logit_model_fwd), confint.default(logit_model_fwd, level = 0.95)))
 
-logit_model$coefficients
+summary(logit_model_fwd)
 
-exp(logit_model$coefficients)
-confint(logit_model)
+logit_model_fwd$coefficients
+
+exp(logit_model_fwd$coefficients[12]) #eurobro3m
+exp(logit_model_fwd$coefficients[10]) #emp.var.rate
+exp(logit_model_fwd$coefficients[3]) #education
+
+# Coefficient Confidence Intervals
+logit_simple_conf <- confint(logit_model_fwd)
+
+# eurobor3m
+exp(logit_simple_conf[12])
+exp(logit_simple_conf[12,2])
+
+# emp.var.rate
+exp(logit_simple_conf[10])
+exp(logit_simple_conf[10,2])
+
+exp(logit_simple_conf[3])
+exp(logit_simple_conf[3,2])
 ```
 
 ### Objective 2 - Competing Models and Model Tuning
 ```{r,warning=FALSE,message=FALSE}
-# Viewing Model Selection Prediction Specificity/Sensivity
+# Viewing Model Selection Prediction Specificity/Sensivity through ROC
 library(ROCR)
-results_logit_pred <- prediction(logit_pred, full_model_test$clnt.subcr_desc, label.ordering=c("yes","no"))
+results_logit_pred <- prediction(logit_pred_fwd.class, full_model_test$clnt.subcr_desc, label.ordering=c("no","yes"))
 featureselect_ROC <- performance(results_logit_pred, measure="tpr", x.measure="fpr")
+
 plot(featureselect_ROC, colorize=TRUE)
 abline(a=0, b=1)
 
-# Adding complexity to the model: what if we were to take our highly correlated values and instead apply an interaction?
 
 ```
 
 
+### Objective 2 - Complex Logistic Regression Model - Interaction
+```{r,warning=FALSE,message=FALSE}
+# viewing distribution of all simple model terms to see if transformations can be made
+simple_model_var <- c(1,2,3,4,5,6,8,9,10,11,12,13,14)
+simple_model_plot_df <- reduced_fwd_model[,simple_model_var]
+
+# distribution of simple model predictors BEFORE transformation
+simple_model_distplot <- par(mfrow=c(3,5))
+for(i in 1:13){
+  x <- colnames(simple_model_plot_df[i])
+  y <- paste("Distribution of", x)
+  hist(simple_model_plot_df[,i], xlab=x, main=y)
+}
+par(simple_model_distplot)
+
+# transforming predictors
+complex_model <- reduced_fwd_model
+# complex_model$duration <- log(complex_model$age)
+complex_model$duration <- log(complex_model$duration)
+# complex_model$duration <- log(complex_model$pdays)
+# complex_model$emp.var.rate <- log(complex_model$emp.var.rate)
+# complex_model$cons.conf.idx <- log(complex_model$cons.conf.idx)
+# complex_model$cons.conf.idx <- log(complex_model$eurobor3m)
+complex_model$nr.employed <- log(complex_model$nr.employed)
+
+# distribution of simple model predictors AFTER transformation
+simple_model_plot_df_var <- c(9, 14)
+simple_model_plot_df_after <- complex_model[,simple_model_plot_df_var]
+simple_model_distplot_after <- par(mfrow=c(2,1))
+for(i in 1:3){
+  x <- colnames(simple_model_plot_df_after[i])
+  y <- paste("Distribution of", x)
+  hist(simple_model_plot_df_after[,i], xlab=x, main=y)
+}
+par(simple_model_distplot_after)
+
+# Testing Logistic Model with Trasnformations
+complex_transform_model <- glm(clnt.subcr_desc~., family="binomial", data=complex_model[, -6])
+complex_pred_transform_model <- predict(complex_transform_model, newdata=full_model_test, type="response", interval="confidence")
+complex_transform_model.class <- factor(ifelse(pred_transform_model>cutoff, "yes", "no"))
+complex_confusionmatrix_transform <- confusionMatrix(complex_transform_model.class, as.factor(full_model_test$clnt.subcr_desc))
+complex_confusionmatrix_transform
+summary(complex_transform_model)
+```
+
+### Objective 2 - Complex Logistic Regression Model - Interaction
+```{r,warning=FALSE,message=FALSE}
+# transforming predictors
+complex_model_interaction <- reduced_fwd_model
+# modeling including Education and Emp.Var.Rate as interaction terms
+complex_interact_model <- glm(clnt.subcr_desc~job_ID+education_ID+contact_ID+month_ID+
+                                poutcome_ID+age+duration+pdays+emp.var.rate+cons.conf.idx+euribor3m+nr.employed + 
+                                emp.var.rate*education_ID+job_ID*nr.employed+euribor3m*emp.var.rate, family="binomial", data=complex_model)
 
 
+# emp.var.rate*education_ID
+# job_ID*nr.employed
+# euribor3m*emp.var.rate
+# job_ID*duration
+
+complex_pred_interact_model <- predict(complex_interact_model, newdata=full_model_test, type="response", interval="confidence")
+complex_interact_model.class <- factor(ifelse(complex_pred_interact_model>cutoff, "yes", "no"))
+complex_confusionmatrix_interact <- confusionMatrix(complex_transform_model.class, as.factor(full_model_test$clnt.subcr_desc))
+complex_confusionmatrix_interact
+
+complex_interact_model
+summary(complex_interact_model)
+```
+
+### Objective 2 - Complex Logistic Regression Model - Interaction with Transformations
+```{r,warning=FALSE,message=FALSE}
+# transforming predictors
+complex_model_both <- reduced_fwd_model
+complex_model_both$duration <- log(complex_model_both$duration)
+complex_model_both$nr.employed <- log(complex_model_both$nr.employed)
 
 
+# modeling including Education and Emp.Var.Rate as interaction terms
+complex_both_model <- glm(clnt.subcr_desc~job_ID+education_ID+contact_ID+month_ID+
+                                poutcome_ID+age+duration+pdays+emp.var.rate+cons.conf.idx+euribor3m+nr.employed+emp.var.rate*education_ID+job_ID*nr.employed+euribor3m*emp.var.rate+job_ID*duration, family="binomial", data=complex_model_both)
+
+                                emp.var.rate*education_ID+job_ID*nr.employed+euribor3m*emp.var.rate+job_ID*duration
+
+complex_pred_both_model <- predict(complex_both_model, newdata=full_model_test, type="response", interval="confidence")
+complex_both_model.class <- factor(ifelse(complex_pred_both_model>cutoff, "yes", "no"))
+complex_confusionmatrix_both <- confusionMatrix(complex_both_model.class, as.factor(full_model_test$clnt.subcr_desc))
+complex_confusionmatrix_both
+```
+
+### Objective 2 - LDA Model
+```{r,warning=FALSE,message=FALSE}
+library(MASS)
+# Estimate preprocessing parameters
+lda_train<-reduced_fwd_model
+lda_test<-reduced_fwd_model
+lda_train<-lda_train[,c("job_ID", "marital_ID", "education_ID", "default_ID", "housing_ID", "loan_ID", "contact_ID", "month_ID", "day_of_week_ID", "poutcome_ID", "age", "duration", "campaign", "pdays", "previous", "emp.var.rate", "cons.price.idx", "cons.conf.idx", "euribor3m", "clnt.subcr_ID")]
+lda_test<-lda_test[,c("job_ID", "marital_ID", "education_ID", "default_ID", "housing_ID", "loan_ID", "contact_ID", "month_ID", "day_of_week_ID", "poutcome_ID", "age", "duration", "campaign", "pdays", "previous", "emp.var.rate", "cons.price.idx", "cons.conf.idx", "euribor3m", "clnt.subcr_ID")]
+#The Model
+model.lda<-lda(clnt.subcr_ID~., data=lda_train)
+#Predictions
+predictions <- model.lda %>% predict(lda_train)
+#Model Accuracy
+mean(predictions$class==lda_train$clnt.subcr_ID)
+model.lda
+plot(model.lda)
+# Predicted classes
+head(predictions$class, 6)
+# Predicted probabilities of class memebership.
+head(predictions$posterior, 6) 
+# Linear discriminants
+head(predictions$x, 3) 
+#GGPLOT
+lda.data <- cbind(lda_train, predict(model.lda)$x)
+ggplot(lda.data, aes(LD1, clnt.subcr_ID)) +
+  geom_point(aes(color = clnt.subcr_ID))
+#Model Accuracy
+mean(predictions$class==lda_train$clnt.subcr_ID)
+#Number of groups in the setosa group
+sum(predictions$posterior[ ,1] >=.5)
+```
+
+### Objective 2 - Nonparametric Model
+```{r,warning=FALSE,message=FALSE}
+library(class) # for knn
+# all predictors, converted categorical included
+reduced_model_train_knn <- reduced_fwd_model[,-7]
+reduced_model_test_knn <- reduced_fwd_model_test[,-7]
+
+knn_classification <- knn(reduced_model_train_knn,reduced_model_test_knn, reduced_model_train_knn$clnt.subcr_ID,prob = TRUE, k = 5)
+knn_reduced_model_confusionMatrix <- confusionMatrix(table(knn_classification,reduced_model_test_knn$clnt.subcr_ID))
+knn_reduced_model_confusionMatrix
+
+# kNN on only numerical predictors and binary predictors
+knn_vars_exclude <- c(1,2,4,5,7)
+reduced_model_train_knn_numonly <- reduced_fwd_model[, -knn_vars_exclude]
+reduced_model_test_knn_numonly <- reduced_fwd_model_test[, -knn_vars_exclude]
+
+knn_classification <- knn(reduced_model_train_knn_numonly,reduced_model_test_knn_numonly, reduced_model_train_knn_numonly$clnt.subcr_ID,prob = TRUE, k = 18)
+knn_reduced_model_confusionMatrix <- confusionMatrix(table(knn_classification,reduced_model_test_knn_numonly$clnt.subcr_ID))
+knn_reduced_model_confusionMatrix
+
+# tuning KNN for k
+# dim(beer_df_cleaned)
+set.seed(27)
+numks = 90
+
+masterAcc = matrix(ncol = numks)
+for(i in 1:numks)
+{
+  classifications = knn(reduced_model_train_knn_numonly,reduced_model_test_knn_numonly, reduced_model_train_knn_numonly$clnt.subcr_ID,prob = TRUE, k = i)
+  table(classifications,reduced_model_test_knn_numonly$clnt.subcr_ID)
+  CM = confusionMatrix(table(classifications,reduced_model_test_knn_numonly$clnt.subcr_ID))
+  masterAcc[i] = CM$overall[1]
+}
+
+MeanAcc = colMeans(masterAcc)
+mean(masterAcc)
+which.max(MeanAcc)
+max(MeanAcc)
+plot(seq(1,numks,1),MeanAcc, type = "l")
+```
 
 
 
